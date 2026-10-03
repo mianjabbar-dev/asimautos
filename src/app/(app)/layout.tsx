@@ -8,6 +8,9 @@ import { logoutAction } from "./actions";
 import { SearchBox, MobileMenu } from "@/components/app-shell-client";
 import { cn } from "@/lib/cn";
 
+/** All app pages are authenticated + data-driven: never prerender statically. */
+export const dynamic = "force-dynamic";
+
 type NavItem = { href: string; label: string; icon: string; ownerOnly?: boolean };
 
 const NAV: NavItem[] = [

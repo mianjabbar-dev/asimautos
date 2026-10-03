@@ -126,7 +126,7 @@ const inputCls =
   "block w-full rounded-lg border border-slate-300 bg-white px-3 text-slate-900 placeholder:text-slate-400 shadow-sm transition-colors focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600/20 disabled:bg-slate-100 disabled:text-slate-500";
 
 export function Input(
-  props: React.InputHTMLAttributes<HTMLInputElement> & { size?: "sm" | "md" }
+  props: Omit<React.InputHTMLAttributes<HTMLInputElement>, "size"> & { size?: "sm" | "md" }
 ) {
   const { size = "md", className, ...rest } = props;
   return (
@@ -138,7 +138,7 @@ export function Input(
 }
 
 export function Select(
-  props: React.SelectHTMLAttributes<HTMLSelectElement> & { size?: "sm" | "md" }
+  props: Omit<React.SelectHTMLAttributes<HTMLSelectElement>, "size"> & { size?: "sm" | "md" }
 ) {
   const { size = "md", className, children, ...rest } = props;
   return (
