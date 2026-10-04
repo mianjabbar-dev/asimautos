@@ -91,6 +91,7 @@ export async function getSession(): Promise<SessionUser | null> {
     const store = await cookies();
     const token = store.get(COOKIE_NAME)?.value;
     if (!token) return null;
+    
     const { payload } = await jwtVerify(token, secret());
     if (
       typeof payload.id !== "string" ||
@@ -99,20 +100,23 @@ export async function getSession(): Promise<SessionUser | null> {
     ) {
       return null;
     }
+    
     // Re-check the user still exists and is active (server-side truth).
-    const [user] = await db
-      .select({
-        id: users.id,
-        shopId: users.shopId,
-        name: users.name,
-        email: users.email,
-        role: users.role,
-        active: users.active,
-      })
+    // FIX: Removed specific column selection to avoid Turbopack null schema errors
+    const result = await db
+      .select()
       .from(users)
       .where(eq(users.id, payload.id as string))
       .limit(1);
+      
+    // Safely check if result is valid instead of array destructuring
+    if (!result || !Array.isArray(result) || result.length === 0) {
+      return null;
+    }
+    
+    const user = result[0];
     if (!user || !user.active) return null;
+    
     return {
       id: user.id,
       shopId: user.shopId,
@@ -120,7 +124,8 @@ export async function getSession(): Promise<SessionUser | null> {
       email: user.email,
       role: user.role,
     };
-  } catch {
+  } catch (error) {
+    console.error("Session verification failed:", error);
     return null;
   }
 }
@@ -154,14 +159,22 @@ export async function loginWithPassword(
   password: string
 ): Promise<SessionUser> {
   const normalized = email.trim().toLowerCase();
-  const [user] = await db
+  
+  const result = await db
     .select()
     .from(users)
     .where(and(eq(users.email, normalized), eq(users.active, true)))
     .limit(1);
-  if (!user) throw new AuthError("Invalid email or password.");
+    
+  // Safely check if result is valid instead of array destructuring
+  if (!result || !Array.isArray(result) || result.length === 0) {
+    throw new AuthError("Invalid email or password.");
+  }
+  
+  const user = result[0];
   const ok = await verifyPassword(password, user.passwordHash);
   if (!ok) throw new AuthError("Invalid email or password.");
+  
   const sessionUser: SessionUser = {
     id: user.id,
     shopId: user.shopId,
@@ -169,6 +182,7 @@ export async function loginWithPassword(
     email: user.email,
     role: user.role,
   };
+  
   await createSessionCookie(sessionUser);
   return sessionUser;
 }

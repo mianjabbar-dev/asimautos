@@ -31,25 +31,16 @@ export default async function DashboardPage() {
   const session = await requireSession();
   const shopId = session.shopId;
 
-  const [
-    stats,
-    action,
-    recentSales,
-    recentPurchases,
-    topSelling,
-    slowMoving,
-    movements,
-    notifs,
-  ] = await Promise.all([
-    getDashboardStats(shopId),
-    getActionRequired(shopId),
-    getRecentSales(shopId),
-    getRecentPurchases(shopId),
-    getTopSelling(shopId),
-    getSlowMoving(shopId),
-    getRecentMovements(shopId),
-    getRecentNotifications(shopId),
-  ]);
+  // Executing database queries sequentially instead of Promise.all
+  // This prevents the Neon DB connection pool from timing out (ETIMEDOUT)
+  const stats = await getDashboardStats(shopId);
+  const action = await getActionRequired(shopId);
+  const recentSales = await getRecentSales(shopId);
+  const recentPurchases = await getRecentPurchases(shopId);
+  const topSelling = await getTopSelling(shopId);
+  const slowMoving = await getSlowMoving(shopId);
+  const movements = await getRecentMovements(shopId);
+  const notifs = await getRecentNotifications(shopId);
 
   const cards = [
     { label: "Total Products", value: String(stats.totalProducts) },

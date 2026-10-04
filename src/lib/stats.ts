@@ -63,70 +63,65 @@ export async function getDashboardStats(shopId: string) {
   const today = startOfToday();
   const month = startOfMonth();
 
-  const [
-    productCount,
-    stockAgg,
-    lowStock,
-    outOfStock,
-    todaySales,
-    todayPurchases,
-    todayProfit,
-    monthlySales,
-    monthlyProfit,
-    receivables,
-    payables,
-    unreadNotifications,
-  ] = await Promise.all([
-    db
-      .select({ v: sql<number>`count(*)` })
-      .from(products)
-      .where(and(eq(products.shopId, shopId), eq(products.active, true))),
-    db
-      .select({
-        units: sql<number>`coalesce(sum(${products.currentStock}),0)`,
-        value: sql<number>`coalesce(sum(${products.currentStock} * ${products.purchasePrice}),0)`,
-      })
-      .from(products)
-      .where(and(eq(products.shopId, shopId), eq(products.active, true))),
-    db
-      .select({ v: sql<number>`count(*)` })
-      .from(products)
-      .where(
-        and(
-          eq(products.shopId, shopId),
-          eq(products.active, true),
-          gt(products.currentStock, 0),
-          sql`${products.currentStock} <= ${products.minStock}`
-        )
-      ),
-    db
-      .select({ v: sql<number>`count(*)` })
-      .from(products)
-      .where(
-        and(
-          eq(products.shopId, shopId),
-          eq(products.active, true),
-          eq(products.currentStock, 0)
-        )
-      ),
-    sumTotal(shopId, sales, sales.saleDate, today),
-    sumTotal(shopId, purchases, purchases.purchaseDate, today),
-    grossProfitSince(shopId, today),
-    sumTotal(shopId, sales, sales.saleDate, month),
-    grossProfitSince(shopId, month),
-    db
-      .select({ v: sql<number>`coalesce(sum(${sales.remaining}),0)` })
-      .from(sales)
-      .where(eq(sales.shopId, shopId)),
-    db
-      .select({ v: sql<number>`coalesce(sum(${purchases.remaining}),0)` })
-      .from(purchases)
-      .where(eq(purchases.shopId, shopId)),
-    db
-      .select({ v: sql<number>`count(*)` })
-      .from(notifications)
-      .where(and(eq(notifications.shopId, shopId), eq(notifications.isRead, false))),
-  ]);
+  // Executing queries sequentially instead of Promise.all to avoid 
+  // choking the DB connection pool (ETIMEDOUT) on free-tier instances.
+  
+  const productCount = await db
+    .select({ v: sql<number>`count(*)` })
+    .from(products)
+    .where(and(eq(products.shopId, shopId), eq(products.active, true)));
+
+  const stockAgg = await db
+    .select({
+      units: sql<number>`coalesce(sum(${products.currentStock}),0)`,
+      value: sql<number>`coalesce(sum(${products.currentStock} * ${products.purchasePrice}),0)`,
+    })
+    .from(products)
+    .where(and(eq(products.shopId, shopId), eq(products.active, true)));
+
+  const lowStock = await db
+    .select({ v: sql<number>`count(*)` })
+    .from(products)
+    .where(
+      and(
+        eq(products.shopId, shopId),
+        eq(products.active, true),
+        gt(products.currentStock, 0),
+        sql`${products.currentStock} <= ${products.minStock}`
+      )
+    );
+
+  const outOfStock = await db
+    .select({ v: sql<number>`count(*)` })
+    .from(products)
+    .where(
+      and(
+        eq(products.shopId, shopId),
+        eq(products.active, true),
+        eq(products.currentStock, 0)
+      )
+    );
+
+  const todaySales = await sumTotal(shopId, sales, sales.saleDate, today);
+  const todayPurchases = await sumTotal(shopId, purchases, purchases.purchaseDate, today);
+  const todayProfit = await grossProfitSince(shopId, today);
+  const monthlySales = await sumTotal(shopId, sales, sales.saleDate, month);
+  const monthlyProfit = await grossProfitSince(shopId, month);
+
+  const receivables = await db
+    .select({ v: sql<number>`coalesce(sum(${sales.remaining}),0)` })
+    .from(sales)
+    .where(eq(sales.shopId, shopId));
+
+  const payables = await db
+    .select({ v: sql<number>`coalesce(sum(${purchases.remaining}),0)` })
+    .from(purchases)
+    .where(eq(purchases.shopId, shopId));
+
+  const unreadNotifications = await db
+    .select({ v: sql<number>`count(*)` })
+    .from(notifications)
+    .where(and(eq(notifications.shopId, shopId), eq(notifications.isRead, false)));
 
   return {
     totalProducts: Number(productCount[0]?.v ?? 0),
@@ -187,14 +182,13 @@ export async function getActionRequired(shopId: string) {
     .orderBy(products.name)
     .limit(10);
 
-  // Attach rule-based reorder suggestions.
-  const lowWithSuggestion = await Promise.all(
-    low.map(async (p) => {
-      const avg = await avgMonthlySales(shopId, p.id);
-      const s = suggestReorder(p.currentStock, p.minStock, p.reorderQty, avg);
-      return { ...p, suggested: s.recommendedQty, reasons: s.reasons };
-    })
-  );
+  // Attach rule-based reorder suggestions sequentially
+  const lowWithSuggestion = [];
+  for (const p of low) {
+    const avg = await avgMonthlySales(shopId, p.id);
+    const s = suggestReorder(p.currentStock, p.minStock, p.reorderQty, avg);
+    lowWithSuggestion.push({ ...p, suggested: s.recommendedQty, reasons: s.reasons });
+  }
 
   return { lowStock: lowWithSuggestion, outOfStock: out };
 }
