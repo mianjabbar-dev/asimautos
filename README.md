@@ -104,8 +104,8 @@ npm run build && npm start
 
 Seeded accounts (dev only — change passwords after first login):
 
-- **Owner:** `admin@asimautos.pk` / value of `SEED_ADMIN_PASSWORD` (default `Admin@12345`)
-- **Staff:** `staff@asimautos.pk` / `Staff@12345`
+- **Owner:** `****************************`
+- **Staff:** *************************************
 
 To create the very first admin on a **fresh production DB** (no seed): run the seed
 once (`npm run db:seed` creates the shop + owner), then change the password, or add
